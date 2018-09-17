@@ -1,7 +1,7 @@
 ## 安装kingshard
 ```
 	1. 安装Go语言环境（Go版本1.6以上），具体步骤请Google。
-	2. git clone https://github.com/flike/kingshard.git src/github.com/flike/kingshard
+	2. git clone https://github.com/flike/kingshard.git $GOPATH/src/github.com/flike/kingshard
 	3. cd src/github.com/flike/kingshard
 	4. source ./dev.sh
 	5. make
@@ -9,15 +9,17 @@
 	7. 运行kingshard。./bin/kingshard -config=etc/ks.yaml
 ```
 
-##配置文件说明
+## 配置文件说明
 
 ```
 # kingshard的地址和端口
 addr : 0.0.0.0:9696
 
-# 连接kingshard的用户名和密码
-user :  kingshard
-password : kingshard
+# 连接kingshard的用户名和密码的用户列表
+user_list:
+-
+    user :  kingshard
+    password : kingshard
 #kingshard的web API 端口
 web_addr : 0.0.0.0:9797
 #调用API的用户名和密码
@@ -70,17 +72,21 @@ nodes :
     slave :
     down_after_noalive: 100
 
-# 分表规则
-schema :
+# 各用户的分表规则
+schema_list :
+-
+    #schema的所属用户名
+    user: kingshard
+    nodes: [node1,node2]
     #分表分布的node名字
     nodes: [node1,node2]
-	#所有未分表的SQL，都会发往默认node。
+    #所有未分表的SQL，都会发往默认node。
     default: node1
     shard:
     -
         #分表使用的db
         db : kingshard
-		#分表名字
+	#分表名字
         table: test_shard_hash
         #分表字段
         key: id
@@ -93,27 +99,27 @@ schema :
         locations: [4,4]
 
     -
-		#分表使用的db
+	#分表使用的db
         db : kingshard
-		#分表名字
+	#分表名字
         table: test_shard_range
-	    #分表字段
+	#分表字段
         key: id
-		#分表类型
+	#分表类型
         type: range
-	    #分表分布的node
+	#分表分布的node
         nodes: [node1, node2]
-		#子表个数分布，表示node1有4个子表，
-		#node2有4个子表。
+	#子表个数分布，表示node1有4个子表，
+	#node2有4个子表。
         locations: [4,4]
         #表示每个子表包含的最大记录数，也就是说每
-	    #个子表最多包好10000条记录。即子表1对应的id为[0,10000),子表2[10000,20000)....
+	#个子表最多包好10000条记录。即子表1对应的id为[0,10000),子表2[10000,20000)....
         table_row_limit: 10000
 
 
 ```
 
-##注意
+## 注意
 
 **1. kingshard会响应SIGINT,SIGTERM,SIGQUIT这三个信号，平滑退出。在部署kingshard机器上应避免产生这三个信号，以免造成kingshard非正常退出！后台运行kingshard建议使用supervisor工具**
 

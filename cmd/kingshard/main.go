@@ -29,6 +29,7 @@ import (
 	"github.com/flike/kingshard/core/hack"
 	"github.com/flike/kingshard/proxy/server"
 	"github.com/flike/kingshard/web"
+	"github.com/flike/kingshard/monitor"
 )
 
 var configFile *string = flag.String("config", "/etc/ks.yaml", "kingshard config file")
@@ -97,6 +98,7 @@ func main() {
 
 	var svr *server.Server
 	var apiSvr *web.ApiServer
+	var prometheusSvr *monitor.Prometheus
 	svr, err = server.NewServer(cfg)
 	if err != nil {
 		golog.Error("main", "main", err.Error(), 0)
@@ -112,6 +114,14 @@ func main() {
 		svr.Close()
 		return
 	}
+	prometheusSvr, err = monitor.NewPrometheus(cfg.PrometheusAddr, svr)
+	if err != nil {
+		golog.Error("main", "main", err.Error(), 0)
+		golog.GlobalSysLogger.Close()
+		golog.GlobalSqlLogger.Close()
+		svr.Close()
+		return
+	}
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
@@ -119,6 +129,7 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT,
 		syscall.SIGPIPE,
+		syscall.SIGUSR1,
 	)
 
 	go func() {
@@ -131,10 +142,19 @@ func main() {
 				svr.Close()
 			} else if sig == syscall.SIGPIPE {
 				golog.Info("main", "main", "Ignore broken pipe signal", 0)
+			} else if sig == syscall.SIGUSR1 {
+				golog.Info("main", "main", "Got update config signal", 0)
+				newCfg, err := config.ParseConfigFile(*configFile)
+				if err != nil {
+					golog.Error("main", "main", fmt.Sprintf("parse config file error:%s", err.Error()), 0)
+				} else {
+					svr.UpdateConfig(newCfg)
+				}
 			}
 		}
 	}()
 	go apiSvr.Run()
+	go prometheusSvr.Run()
 	svr.Run()
 }
 

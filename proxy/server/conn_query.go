@@ -45,6 +45,8 @@ func (c *ClientConn) handleQuery(sql string) (err error) {
 					err.Error(), 0,
 					"stack", string(buf), "sql", sql)
 			}
+
+			err = errors.ErrInternalServer
 			return
 		}
 	}()
@@ -89,9 +91,15 @@ func (c *ClientConn) handleQuery(sql string) (err error) {
 	case *sqlparser.Rollback:
 		return c.handleRollback()
 	case *sqlparser.Admin:
-		return c.handleAdmin(v)
+		if c.user == "root" {
+			return c.handleAdmin(v)
+		}
+		return fmt.Errorf("statement %T not support now", stmt)
 	case *sqlparser.AdminHelp:
-		return c.handleAdminHelp(v)
+		if c.user == "root" {
+			return c.handleAdminHelp(v)
+		}
+		return fmt.Errorf("statement %T not support now", stmt)
 	case *sqlparser.UseDB:
 		return c.handleUseDB(v.DB)
 	case *sqlparser.SimpleSelect:
@@ -271,11 +279,11 @@ func (c *ClientConn) executeInMultiNodes(conns map[string]*backend.BackendConn, 
 		wg.Done()
 	}
 
-	offsert := 0
+	offset := 0
 	for nodeName, co := range conns {
 		s := sqls[nodeName] //[]string
-		go f(rs, offsert, s, co)
-		offsert += len(s)
+		go f(rs, offset, s, co)
+		offset += len(s)
 	}
 
 	wg.Wait()

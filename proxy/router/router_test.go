@@ -26,7 +26,8 @@ import (
 
 func TestParseRule(t *testing.T) {
 	var s = `
-schema:
+schema_list:
+-
   nodes: [node1, node2, node3]
   default: node1
   shard:
@@ -51,7 +52,7 @@ schema:
 		t.Fatal(err)
 	}
 
-	rt, err := NewRouter(&cfg.Schema)
+	rt, err := NewRouter(&cfg.SchemaList[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +102,8 @@ schema:
 
 func newTestRouter() *Router {
 	var s = `
-schema :
+schema_list :
+-
   nodes: [node1,node2,node3,node4,node5,node6,node7,node8,node9,node10]
   default: node1
   shard:
@@ -152,7 +154,7 @@ schema :
 
 	var r *Router
 
-	r, err = NewRouter(&cfg.Schema)
+	r, err = NewRouter(&cfg.SchemaList[0])
 	if err != nil {
 		println(err.Error())
 		panic(err)
@@ -164,7 +166,8 @@ schema :
 //TODO YYYY-MM-DD HH:MM:SS,YYYY-MM-DD test
 func TestParseDateRule(t *testing.T) {
 	var s = `
-schema:
+schema_list:
+-
   nodes: [node1, node2, node3]
   default: node1
   shard:
@@ -195,7 +198,7 @@ schema:
 		t.Fatal(err)
 	}
 
-	rt, err := NewRouter(&cfg.Schema)
+	rt, err := NewRouter(&cfg.SchemaList[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +241,8 @@ schema:
 
 func newTestDBRule() *Router {
 	var s = `
-schema :
+schema_list :
+-
   nodes: [node1,node2,node3,node4,node5,node6,node7,node8,node9,node10]
   default: node1
   shard:
@@ -268,7 +272,7 @@ schema :
 
 	var r *Router
 
-	r, err = NewRouter(&cfg.Schema)
+	r, err = NewRouter(&cfg.SchemaList[0])
 	if err != nil {
 		println(err.Error())
 		panic(err)
@@ -353,22 +357,26 @@ func checkPlan(t *testing.T, sql string, tableIndexs []int, nodeIndexs []int) {
 }
 func TestWhereInPartitionByTableIndex(t *testing.T) {
 	var sql string
+	t1 := makeList(0, 12)
+
 	//2016-08-02 13:37:26
 	sql = "select * from test1 where id in (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22) "
 	checkPlan(t, sql,
-		[]int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
+		t1,
 		[]int{0, 1, 2},
 	)
 	// ensure no impact for or operator in where
 	sql = "select * from test1 where id in (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21) or name='test'"
 	checkPlan(t, sql,
-		[]int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
+		t1,
 		[]int{0, 1, 2},
 	)
 
 	// ensure no impact for not in
 	sql = "select * from test1 where id not in (0,1,2,3,4,5,6,7)"
-	checkPlan(t, sql, []int{8, 9, 10, 11}, []int{2})
+	checkPlan(t, sql,
+		t1,
+		[]int{0, 1, 2})
 
 }
 
@@ -469,7 +477,7 @@ func TestSelectPlan(t *testing.T) {
 	checkPlan(t, sql, t1, []int{0, 1, 2})
 
 	sql = "select * from test1 where id not in (5, 6)"
-	checkPlan(t, sql, []int{0, 1, 2, 3, 4, 7, 8, 9, 10, 11}, []int{0, 1, 2})
+	checkPlan(t, sql, t1, []int{0, 1, 2})
 
 	sql = "select * from test1 where id in (5, 6) or (id in (5, 6, 7,8) and id in (1,5,7))"
 	checkPlan(t, sql, []int{5, 6, 7}, []int{1})

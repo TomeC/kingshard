@@ -69,13 +69,16 @@ func (s *ApiServer) DelAllowIps(c echo.Context) error {
 }
 
 type DBStatus struct {
-	Node     string `json:"node"`
-	Address  string `json:"address"`
-	Type     string `json:"type"`
-	Status   string `json:"status"`
-	LastPing string `json:"laste_ping"`
-	MaxConn  int    `json:"max_conn"`
-	IdleConn int    `json:"idle_conn"`
+	Node      		string `json:"node"`
+	Address   		string `json:"address"`
+	Type      		string `json:"type"`
+	Status    		string `json:"status"`
+	LastPing  		string `json:"laste_ping"`
+	MaxConn   		int    `json:"max_conn"`
+	IdleConn  		int    `json:"idle_conn"`
+	CacheConn 		int    `json:"cache_conn"`
+	PushConnCount  	int64  `json:"push_conn_count"`
+	PopConnCount   	int64  `json:"pop_conn_count"`
 }
 
 //get nodes status
@@ -86,6 +89,9 @@ func (s *ApiServer) GetNodesStatus(c echo.Context) error {
 	nodes := s.proxy.GetAllNodes()
 
 	for nodeName, node := range nodes {
+		//get master counter
+		idleConns,cacheConns,pushConnCount,popConnCount := node.Master.ConnCount()
+
 		//get master status
 		masterStatus.Node = nodeName
 		masterStatus.Address = node.Master.Addr()
@@ -93,18 +99,27 @@ func (s *ApiServer) GetNodesStatus(c echo.Context) error {
 		masterStatus.Status = node.Master.State()
 		masterStatus.LastPing = fmt.Sprintf("%v", time.Unix(node.Master.GetLastPing(), 0))
 		masterStatus.MaxConn = node.Cfg.MaxConnNum
-		masterStatus.IdleConn = node.Master.IdleConnCount()
+		masterStatus.IdleConn = idleConns
+		masterStatus.CacheConn = cacheConns
+		masterStatus.PushConnCount = pushConnCount
+		masterStatus.PopConnCount = popConnCount
 		dbStatus = append(dbStatus, masterStatus)
 
 		//get slaves status
 		for _, slave := range node.Slave {
+			//get slave counter
+			idleConns,cacheConns,pushConnCount,popConnCount := slave.ConnCount()
+
 			slaveStatus.Node = nodeName
 			slaveStatus.Address = slave.Addr()
 			slaveStatus.Type = "slave"
 			slaveStatus.Status = slave.State()
 			slaveStatus.LastPing = fmt.Sprintf("%v", time.Unix(slave.GetLastPing(), 0))
 			slaveStatus.MaxConn = node.Cfg.MaxConnNum
-			slaveStatus.IdleConn = slave.IdleConnCount()
+			slaveStatus.IdleConn = idleConns
+			slaveStatus.CacheConn = cacheConns
+			slaveStatus.PushConnCount = pushConnCount
+			slaveStatus.PopConnCount = popConnCount
 			dbStatus = append(dbStatus, slaveStatus)
 		}
 	}
@@ -225,6 +240,7 @@ func (s *ApiServer) ChangeProxyStatus(c echo.Context) error {
 
 //range,hash or date
 type ShardConfig struct {
+	User          string   `json:"user"`
 	DB            string   `json:"db"`
 	Table         string   `yaml:"table"`
 	Key           string   `yaml:"key"`
@@ -236,26 +252,30 @@ type ShardConfig struct {
 }
 
 func (s *ApiServer) GetProxySchema(c echo.Context) error {
-	schema := s.cfg.Schema
 	shardConfig := make([]ShardConfig, 0, 10)
-	//append default rule
-	shardConfig = append(shardConfig,
-		ShardConfig{
-			Type:  "default",
-			Nodes: schema.Nodes,
-		})
-	for _, r := range schema.ShardRule {
+	for _, schema := range s.cfg.SchemaList{
+		//append default rule
 		shardConfig = append(shardConfig,
 			ShardConfig{
-				DB:            r.DB,
-				Table:         r.Table,
-				Key:           r.Key,
-				Nodes:         r.Nodes,
-				Locations:     r.Locations,
-				Type:          r.Type,
-				TableRowLimit: r.TableRowLimit,
-				DateRange:     r.DateRange,
+				User:  schema.User,
+				Type:  "default",
+				Nodes: schema.Nodes,
 			})
+		for _, r := range schema.ShardRule {
+			shardConfig = append(shardConfig,
+				ShardConfig{
+					User:		   schema.User,
+					DB:            r.DB,
+					Table:         r.Table,
+					Key:           r.Key,
+					Nodes:         r.Nodes,
+					Locations:     r.Locations,
+					Type:          r.Type,
+					TableRowLimit: r.TableRowLimit,
+					DateRange:     r.DateRange,
+				})
+		}
+
 	}
 	return c.JSON(http.StatusOK, shardConfig)
 }

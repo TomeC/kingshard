@@ -45,12 +45,14 @@ type Node struct {
 	SlaveWeights   []int
 
 	DownAfterNoAlive time.Duration
+
+	Online bool
 }
 
 func (n *Node) CheckNode() {
 	//to do
 	//1 check connection alive
-	for {
+	for n.Online {
 		n.checkMaster()
 		n.checkSlave()
 		time.Sleep(16 * time.Second)
@@ -103,7 +105,11 @@ func (n *Node) checkMaster() {
 	} else {
 		if atomic.LoadInt32(&(db.state)) == Down {
 			golog.Info("Node", "checkMaster", "Master up", 0, "db.Addr", db.Addr())
-			n.UpMaster(db.addr)
+			err := n.UpMaster(db.addr)
+			if err != nil {
+				golog.Error("Node", "checkMaster", "UpMaster", 0, "db.Addr", db.Addr(), "error", err.Error())
+				return
+			}
 		}
 		db.SetLastPing()
 		if atomic.LoadInt32(&(db.state)) != ManualDown {
@@ -252,6 +258,7 @@ func (n *Node) UpMaster(addr string) error {
 	db, err := n.UpDB(addr)
 	if err != nil {
 		golog.Error("Node", "UpMaster", err.Error(), 0)
+		return err
 	}
 	n.Master = db
 	return err

@@ -1,9 +1,17 @@
 # server listen addr
 addr : 0.0.0.0:9696
 
+# prometheus server listen addr
+prometheus_addr : 0.0.0.0:7080
+
 # server user and password
-user :  kingshard
-password : kingshard
+user_list:
+-
+    user :  root
+    password : root
+-
+    user :  kingshard
+    password : kingshard
 
 # the web api server
 web_addr : 0.0.0.0:9797
@@ -29,7 +37,8 @@ log_sql: on
 #blacklist_sql_file: /Users/flike/blacklist
 
 # only allow this ip list ip to connect kingshard
-allow_ips : 127.0.0.1,192.168.0.14
+# support ip and ip segment
+#allow_ips : 127.0.0.1,192.168.15.0/24
 
 # the charset of kingshard, if you don't set this item
 # the default charset of kingshard is utf8.
@@ -48,7 +57,7 @@ nodes :
     password : root
 
     # master represents a real mysql master server 
-    master : 127.0.0.1:3307
+    master : 127.0.0.1:3306
 
     # slave represents a real mysql salve server,and the number after '@' is 
     # read load weight of this slave.
@@ -75,7 +84,16 @@ nodes :
     down_after_noalive: 32
 
 # schema defines sharding rules, the db is the sharding table database.
-schema :
+schema_list :
+-
+    user: root
+    nodes: [node1,node2]
+    default: node1
+    shard:
+    -
+
+-
+    user: kingshard
     nodes: [node1,node2]
     default: node1      
     shard:

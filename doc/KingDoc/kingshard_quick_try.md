@@ -1,19 +1,19 @@
-#KingShard快速入门
+# KingShard快速入门
 
 
 
-##环境说明
+## 环境说明
 
-本文仅作为最小实验环境，因此不使用master, slave模式. 单机上使用mysql_mutil运行两个mysql实列
+本文仅作为最小实验环境，因此不使用master, slave模式. 单机上使用mysqld_multi运行两个mysql实列
 
 
-##初始化数据目录
+## 初始化数据目录
 
     # mysql_install_db --datadir=/var/lib/mysql2/ --user=mysql
     # mysql_install_db --datadir=/var/lib/mysql3/ --user=mysql
 
 
-##生成配置文件
+## 生成配置文件
 
 利用mysqld_multi工具生成配置文件
 
@@ -46,7 +46,7 @@
     user       = unix_user2
 
 
-###启动多个实例   
+### 启动多个实例   
 
     # mysqld_multi --defaults-extra-file=./mysqld_multi.conf start
     或者 mysqld_multi --defaults-extra-file=./mysqld_multi.conf start 2; mysqld_multi --defaults-extra-file=./mysqld_multi.conf start 3(分别启动)
@@ -64,11 +64,11 @@
 
 说明２个实例都已经启动了。
 
-##安装Kingshard
+## 安装Kingshard
 
 参考[kingshard install](https://github.com/doumadou/kingshard/blob/master/doc/KingDoc/kingshard_install_document.md)
 
-##配置Kingshard
+## 配置Kingshard
 
 修改/etc/hosts文件, 添加如下二行
 
@@ -82,23 +82,52 @@
 ```
 
     # server listen addr
-    addr : 127.0.0.1:9696
+    addr : 0.0.0.0:9696
+
+    # prometheus server listen addr
+    prometheus_addr : 0.0.0.0:7080
 
     # server user and password
-    user :  kingshard
-    password : kingshard
-	# the web api server
+    user_list:
+    -
+        user :  root
+        password : root
+    -
+        user :  kingshard
+        password : kingshard
+
+    # the web api server
     web_addr : 0.0.0.0:9797
     #HTTP Basic Auth
     web_user : admin
     web_password : admin
 
+    # if set log_path, the sql log will write into log_path/sql.log,the system log
+    # will write into log_path/sys.log
+    #log_path : /Users/flike/log
+
     # log level[debug|info|warn|error],default error
     log_level : debug
+
+    # if set log_sql(on|off) off,the sql log will not output
+    log_sql: on
+    
+    # only log the query that take more than slow_log_time ms
+    #slow_log_time : 100
+
+    # the path of blacklist sql file
+    # all these sqls in the file will been forbidden by kingshard
+    #blacklist_sql_file: /Users/flike/blacklist
+
     # only allow this ip list ip to connect kingshard
-    #allow_ips: 127.0.0.1
+    #allow_ips : 127.0.0.1,192.168.0.14
+
+    # the charset of kingshard, if you don't set this item
+    # the default charset of kingshard is utf8.
+    #proxy_charset: gbk
 
     # node is an agenda for real remote mysql server.
+
     nodes :
     -
         name : node1
@@ -138,8 +167,10 @@
         # 0 will no down
         down_after_noalive: 100
 
-    # schema defines which db can be used by client and this db's sql will be executed in which nodes
-    schema :
+    # schema defines sharding rules, the db is the sharding table database. 
+    schema_list :
+    -   
+        user: kingshard
         nodes: [node1,node2]
 		default: node1
         shard:
@@ -161,37 +192,37 @@
 
 ```
 
-##设置mysql实例信息
+## 设置mysql实例信息
 
-###设置用户
+### 设置用户
 分类登陆mysqld2, mysqld3, 创建root用户(该用户是给kingshard管理的，测试为了方便所以直接使用root)
 若用户存在，跳过此步
 
     /usr/bin/mysqladmin -h 127.0.0.1 -P 3307 -u root password 'root'
     /usr/bin/mysqladmin -h 127.0.0.1 -P 3308 -u root password 'root'
 
-###建数据库
+### 建数据库
     分类登陆mysqld2, mysqld2，创建kingshard数据库
     /usr/bin/mysql -h 127.0.0.1 -P 3307 -u root -proot -e "create database kingshard;"
     /usr/bin/mysql -h 127.0.0.1 -P 3308 -u root -proot -e "create database kingshard;"
 
 
-##启动Kingshard
+## 启动Kingshard
 
     # ./bin/kingshard -config=etc/ks.yaml
 
-##测试shard功能
+## 测试shard功能
 
 使用test_shard_hash测试 shard　hash分表功能.
 
-###创建分表
+### 创建分表
 
 创建test_shard_hash分表(_0000~_0007), _0001~_0003在node1(mysqld2)上创建, _0004~_0007在node2(mysqld3)上创建。
 
     for i in `seq 0 3`;do /usr/bin/mysql -h 127.0.0.1 -P 3307 -u root -proot kingshard -e "CREATE TABLE IF NOT EXISTS test_shard_hash_000"${i}" ( id BIGINT(64) UNSIGNED  NOT NULL, str VARCHAR(256), f DOUBLE, e enum('test1', 'test2', 'test3', 'test4', 'test5', 'test6', 'test7', 'test8', 'test9', 'test10'), u tinyint unsigned, i tinyint, ni tinyint, PRIMARY KEY (id)) ENGINE=InnoDB DEFAULT CHARSET=utf8;";done
     for i in `seq 4 7`;do /usr/bin/mysql -h 127.0.0.1 -P 3308 -u root -proot kingshard -e "CREATE TABLE IF NOT EXISTS test_shard_hash_000"${i}" ( id BIGINT(64) UNSIGNED  NOT NULL, str VARCHAR(256), f DOUBLE, e enum('test1', 'test2', 'test3', 'test4', 'test5', 'test6', 'test7', 'test8', 'test9', 'test10'), u tinyint unsigned, i tinyint, ni tinyint, PRIMARY KEY (id)) ENGINE=InnoDB DEFAULT CHARSET=utf8;";done
 
-###插入数据
+### 插入数据
 
 mysql连接到kingshard插入数据
 
@@ -223,7 +254,7 @@ kingshard日志如下：
 
 通过kingshard的日志可以看到数据插入时根据不同的hash值，插入到不同的子表里面去了。
 
-###查看数据
+### 查看数据
 
     [root@testnode kingshard]# mysql -h 127.0.0.1 -P 9696 -u kingshard -pkingshard -e "select * from test_shard_hash where id in (2, 3, 4, 5)"
     +----+------+------+-------+------+------+------+

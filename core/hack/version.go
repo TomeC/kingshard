@@ -1,6 +1,6 @@
 package hack
 
 const (
-	Version = "2017-04-25 19:26:47 +0800 @8b29b42"
-	Compile = "2017-05-03 19:55:36 +0800 by go version go1.8 darwin/amd64"
+	Version = "2018-09-07 09:17:26 +0800 @50b5411"
+	Compile = "2018-09-08 11:30:50 +0800 by go version go1.10.2 darwin/amd64"
 )

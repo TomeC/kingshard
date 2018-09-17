@@ -406,6 +406,7 @@ func (c *ClientConn) handleShowProxyConfig() (*mysql.Resultset, error) {
 	var names []string = []string{"Key", "Value"}
 	var rows [][]string
 	var nodeNames []string
+	var users []string
 
 	const (
 		Column = 2
@@ -413,9 +414,12 @@ func (c *ClientConn) handleShowProxyConfig() (*mysql.Resultset, error) {
 	for name := range c.schema.nodes {
 		nodeNames = append(nodeNames, name)
 	}
+	for user, _ := range c.proxy.users {
+		users = append(users, user)
+	}
 
 	rows = append(rows, []string{"Addr", c.proxy.cfg.Addr})
-	rows = append(rows, []string{"User", c.proxy.cfg.User})
+	rows = append(rows, []string{"User_List", strings.Join(users, ",")})
 	rows = append(rows, []string{"LogPath", c.proxy.cfg.LogPath})
 	rows = append(rows, []string{"LogLevel", c.proxy.cfg.LogLevel})
 	rows = append(rows, []string{"LogSql", c.proxy.logSql[c.proxy.logSqlIndex]})
@@ -447,15 +451,20 @@ func (c *ClientConn) handleShowNodeConfig() (*mysql.Resultset, error) {
 		"LastPing",
 		"MaxConn",
 		"IdleConn",
+		"CacheConns",
+		"PushConnCount",
+		"PopConnCount",
 	}
 	var rows [][]string
 	const (
-		Column = 7
+		Column = 10
 	)
 
 	//var nodeRows [][]string
 	for name, node := range c.schema.nodes {
 		//"master"
+		idleConns,cacheConns,pushConnCount,popConnCount := node.Master.ConnCount()
+		
 		rows = append(
 			rows,
 			[]string{
@@ -465,11 +474,16 @@ func (c *ClientConn) handleShowNodeConfig() (*mysql.Resultset, error) {
 				node.Master.State(),
 				fmt.Sprintf("%v", time.Unix(node.Master.GetLastPing(), 0)),
 				strconv.Itoa(node.Cfg.MaxConnNum),
-				strconv.Itoa(node.Master.IdleConnCount()),
+				strconv.Itoa(idleConns),
+				strconv.Itoa(cacheConns),
+				strconv.FormatInt(pushConnCount, 10),
+				strconv.FormatInt(popConnCount, 10),
 			})
 		//"slave"
 		for _, slave := range node.Slave {
 			if slave != nil {
+				idleConns,cacheConns,pushConnCount,popConnCount := slave.ConnCount()
+
 				rows = append(
 					rows,
 					[]string{
@@ -479,7 +493,10 @@ func (c *ClientConn) handleShowNodeConfig() (*mysql.Resultset, error) {
 						slave.State(),
 						fmt.Sprintf("%v", time.Unix(slave.GetLastPing(), 0)),
 						strconv.Itoa(node.Cfg.MaxConnNum),
-						strconv.Itoa(slave.IdleConnCount()),
+						strconv.Itoa(idleConns),
+						strconv.Itoa(cacheConns),
+						strconv.FormatInt(pushConnCount, 10),
+						strconv.FormatInt(popConnCount, 10),
 					})
 			}
 		}
@@ -497,9 +514,9 @@ func (c *ClientConn) handleShowNodeConfig() (*mysql.Resultset, error) {
 }
 
 func (c *ClientConn) handleShowSchemaConfig() (*mysql.Resultset, error) {
-	var Column = 7
 	var rows [][]string
 	var names []string = []string{
+		"User",
 		"DB",
 		"Table",
 		"Type",
@@ -508,38 +525,43 @@ func (c *ClientConn) handleShowSchemaConfig() (*mysql.Resultset, error) {
 		"Locations",
 		"TableRowLimit",
 	}
+	var Column = len(names)
 
-	//default Rule
-	var defaultRule = c.schema.rule.DefaultRule
-	rows = append(
-		rows,
-		[]string{
-			defaultRule.DB,
-			defaultRule.Table,
-			defaultRule.Type,
-			defaultRule.Key,
-			strings.Join(defaultRule.Nodes, ", "),
-			"",
-			"0",
-		},
-	)
+	for _, schemaConfig := range c.proxy.cfg.SchemaList {
+		//default Rule
+		var defaultRule = c.schema.rule.DefaultRule
+		if defaultRule != nil {
+			rows = append(
+				rows,
+				[]string{
+					schemaConfig.User,
+					defaultRule.DB,
+					defaultRule.Table,
+					defaultRule.Type,
+					defaultRule.Key,
+					strings.Join(defaultRule.Nodes, ", "),
+					"",
+					"0",
+				},
+			)
+		}
 
-	schemaConfig := c.proxy.cfg.Schema
-	shardRule := schemaConfig.ShardRule
-
-	for _, r := range shardRule {
-		rows = append(
-			rows,
-			[]string{
-				r.DB,
-				r.Table,
-				r.Type,
-				r.Key,
-				strings.Join(r.Nodes, ", "),
-				hack.ArrayToString(r.Locations),
-				strconv.Itoa(r.TableRowLimit),
-			},
-		)
+		shardRule := schemaConfig.ShardRule
+		for _, r := range shardRule {
+			rows = append(
+				rows,
+				[]string{
+					schemaConfig.User,
+					r.DB,
+					r.Table,
+					r.Type,
+					r.Key,
+					strings.Join(r.Nodes, ", "),
+					hack.ArrayToString(r.Locations),
+					strconv.Itoa(r.TableRowLimit),
+				},
+			)
+		}
 	}
 
 	var values [][]interface{} = make([][]interface{}, len(rows))
@@ -561,16 +583,16 @@ func (c *ClientConn) handleShowAllowIPConfig() (*mysql.Resultset, error) {
 	}
 
 	//allow ips
-	var allowips = c.proxy.allowips[c.proxy.allowipsIndex]
+	current, _, _ := c.proxy.allowipsIndex.Get()
+	var allowips = c.proxy.allowips[current]
 	if len(allowips) != 0 {
 		for _, v := range allowips {
-			if v == nil {
-				continue
+			if v.Info() != "" {
+				rows = append(rows,
+					[]string{
+						v.Info(),
+					})
 			}
-			rows = append(rows,
-				[]string{
-					v.String(),
-				})
 		}
 	}
 
